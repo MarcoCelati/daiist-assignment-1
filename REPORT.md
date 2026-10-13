@@ -29,23 +29,46 @@ The reason a different metric such as Accuracy shouldn't be used is because accu
 
 ## Data preparation & feature engineering
 
-*What you engineered and why, and any data-quality decisions you made along
-the way — e.g. "segment X had defective data, so I excluded it and used a
-population-average default for scope Y at inference time; the impact of
-that choice is Z."*
+I dropped the ID column and renamed some columns to month names. There was also some columns which were hard to interpret like for Education, there was columns 0-6, but only 1-4 were defined as different education levels, and there was nothing for 0, 5, and 6, so I put them into a separate unknown group rather than trying to guess what they could've been. Same for Marriage 0.
+
+In addition, Months late ranged from positive values to -2, which implies some clients paid up to 2 months earlier. I treated 2 months early and 1 month early as simply on time so that the column actually represented months late, and because the results of those who paid on time or those who paid early was very similar and the real risk arose from clients who actually began paying late.
+
+The first feature I created was one for being late in September (late_sep) and one for the number of previous months from April to August in which the client paid late (late_months_apr_aug). I separated them because the September late payment is much more significant towards whether the October payment will be on time, late, or defaulted, compared to late payments of earlier months. I could've made only 1 feature with september going along with the other months, but as it is individually very important for the October outcome, I thought it'd be better to keep it separate.
+
+Another feature I created was credit_usage, which divides the september bill by the client's credit card limit to determine what proportion of their limit they owed in september.
+
+Next, I have payment_ratio, which is the amount they've paid divided by the amount they owed. This allows us to see for instance whether the client aggressively paid back his debt or whether he/she simply paid the minimum amount each month.
+
+The final feature is debt_trend, which is whether the client's debt is growing or shrinking relative to their credit card limit.
+
+Also, something that I had expected was that as long as a client had a clean history in all the months prior to September, I believed that even if they were late in September, they would likely not default in October. However, the results surprised me since even with a good prior history of never being late, if a client was late in September, their default rate was 36% compared to only 11% if they had a good history and were not late in September. So the results reinforced my belief that the september payment would be a key indicator of whether they'd default in October, but it contrasted by thought that as long as they had a good prior history, one late September payment wouldn't be a major difference.
+
+However, a result that followed initial expectations was that out of clients who paid back the smallest share each month had a default rate of 28%, while those who paid the most had a default rate of 17%.
 
 ## Modeling: three implementations, one model
 
-*Which model (linear or logistic regression) and why. A results table
-comparing scikit-learn, the manual PyTorch loop, and the standard
-torch.nn.Module/torch.optim workflow, on the same test set, against the
-naive baseline. Do the three agree? If not, why not?*
+I used a logistic regression because the target was whether the client would default or not which was a Yes/No answer. The logistic regression gives us a probability of whether they'll default, and if it's above a certain threshold, we'd call that client.
+
+All 3 implementations used the same 60/20/20 split and had the same 28 columns.
+
+
+| Model | Threshold | Total cost (NT$) | Clients called | Defaulters caught | Accuracy | AUC |
+|---|---|---|---|---|---|---|
+| scikit-learn | 0.03 | 26,758,889 | 5,960 | 99.7% | 22.7% | 0.768 |
+| PyTorch manual loop | 0.03 | 26,758,889 | 5,960 | 99.7% | 22.7% | 0.768 |
+| PyTorch nn.Module + optim | 0.03 | 26,758,889 | 5,960 | 99.7% | 22.7% | 0.768 |
+| Naive baseline: call nobody | – | 33,056,492 | 0 | 0.0% | 77.9% | – |
+| Naive baseline: call everyone | – | 26,745,194 | 6,000 | 100.0% | 22.1% | – |
+
+All the results are on the same test set of 6,000 clients. The thresholds were chosen on the validation set by minimizing total cost.
+
+All 3 models chose a 3% threshold. The accuracy in the table is misleading from the call nobody baseline because it's only so high because it never makes any of those incorrect phone calls (to people who would have paid anyways). What is more important is the total cost of that baseline is the highest (33 million), which represents all those defaults it did not catch. There's a very small difference in AUC, however, as it is 3s.f., it seems identical within the table above.
 
 ## Limitations & next steps
 
-*Real limitations you found, and concretely how you'd address each one with
-more time or data — not generic hedging.*
+The main limitation I found is I simply assumed that one could do unlimited calls and that they were quite relatively cheap. However, practically I don't think that should actually have been the case because you don't actually have unlimited time to make all those calls, and if you do try to do that, you'd need to hire lots more staff to make all those thousands of calls. The way I think one could address this is adding a constraint of the maximum capacity of calls that the staff can do per month. Moreover, probably the NT$50 cost per call should be increased, otherwise the model would contine simply maximising calls because as of right now, the more calls it makes the lower the total cost, because the amount it saves from catching the defaulters greatly exceeds the amount paid for each of those calls.
+
 
 ## Generative AI use disclosure
 
-*Per the syllabus AI Policy: what you used and how, or "no AI content used."*
+I used AI in order to write a part of the code such as the gradio dashboard, but all the decisions, such as the assumptions or the direction I wanted this assignment to take were mine. I did also use it to help brainstorm ideas because I believe it can be a great source of ideas that one might otherwise not have thought of.
